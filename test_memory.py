@@ -10,6 +10,12 @@ class TestAgenticMemory(unittest.TestCase):
     """
 
     def setUp(self) -> None:
+        import os
+        if os.path.exists("agent_long_term_memory.json"):
+            try:
+                os.remove("agent_long_term_memory.json")
+            except OSError:
+                pass
         # Configuramos una memoria con decaimiento rapido (factor 0.5) para pruebas controladas
         self.memory = AgenticMemory(short_term_max_turns=2, decay_factor=0.5, vector_dim=16)
 

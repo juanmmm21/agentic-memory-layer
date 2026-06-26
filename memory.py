@@ -2,6 +2,7 @@ import sys
 import os
 import time
 import math
+import uuid
 import logging
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -60,7 +61,10 @@ class AgenticMemory:
         if self.use_real_db:
             try:
                 # Inicializamos la base de datos vectorial real del modulo hermano
-                self.vector_db = NanoVectorDB(filepath=self.db_path)
+                if os.path.exists(self.db_path):
+                    self.vector_db = NanoVectorDB.load(self.db_path)
+                else:
+                    self.vector_db = NanoVectorDB(dimension=self.vector_dim)
                 logger.info("Base de datos vectorial NanoVectorDB conectada exitosamente a la memoria del agente.")
             except Exception as e:
                 logger.warning(f"Error al inicializar NanoVectorDB: {str(e)}. Usando fallback de lista en memoria.")
@@ -143,6 +147,7 @@ class AgenticMemory:
             try:
                 # Insertamos en el NanoVectorDB
                 self.vector_db.insert(
+                    id=str(uuid.uuid4()),
                     vector=embedding,
                     metadata={"fact": fact, "importance": importance, "created_at": timestamp, "last_accessed": timestamp}
                 )
