@@ -1,85 +1,85 @@
 # Agentic Memory Layer
 
-Capa de memoria persistente y estructurada para agentes de Inteligencia Artificial que remedia la limitacion de contexto de los modelos de lenguaje (amnesia) mediante una arquitectura hibrida: un buffer de corto plazo conversacional con sintesis automatica y un almacen episódico de largo plazo con decaimiento temporal basado en la curva del olvido de Ebbinghaus.
+Persistent, structured memory layer for AI agents that remedies the context limitation of language models (amnesia) via a hybrid architecture: a short-term conversational buffer with automatic synthesis and a long-term episodic store with temporal decay based on the Ebbinghaus forgetting curve.
 
-## Arquitectura de Memoria Hibrida
+## Hybrid Memory Architecture
 
-El modulo implementa un sistema coordinado de almacenamiento en dos niveles para equilibrar la velocidad de recuperacion en el dialogo activo con la retencion historica de hechos relevantes.
+The module implements a coordinated two-tier storage system to balance retrieval speed in active dialogue with the historical retention of relevant facts.
 
 ```mermaid
 graph TD
-    Input[Entrada del Agente / Turno de Conversacion] --> ShortTerm[Memoria de Corto Plazo: Conversational Buffer]
+    Input[Agent Input / Conversation Turn] --> ShortTerm[Short-Term Memory: Conversational Buffer]
     
-    subgraph Memoria Corto Plazo
-        ShortTerm --> LengthCheck{¿Turnos > Limite Maximo?}
-        LengthCheck -->|Si| Summarize[Extraer Hechos & Compactar]
-        LengthCheck -->|No| KeepActive[Conservar Turnos Intactos]
-        Summarize --> SaveLong[Persistir Hecho en Largo Plazo]
-        Summarize --> SummaryBuffer[Historial de Resumen Acumulado]
+    subgraph Short-Term Memory
+        ShortTerm --> LengthCheck{Turns > Max Limit?}
+        LengthCheck -->|Yes| Summarize[Extract Facts & Compact]
+        LengthCheck -->|No| KeepActive[Keep Turns Intact]
+        Summarize --> SaveLong[Persist Fact to Long-Term]
+        Summarize --> SummaryBuffer[Accumulated Summary History]
     end
     
-    subgraph Memoria Largo Plazo (Episodica)
-        SaveLong --> VectorGen[Generador de Embeddings local]
-        VectorGen --> StorageCheck{¿NanoVectorDB disponible?}
-        StorageCheck -->|Si| NanoVectorDB[HNSW Index en agent_long_term_memory.json]
-        StorageCheck -->|No| MemoryList[Fallback: Lista en Memoria]
+    subgraph Long-Term Memory (Episodic)
+        SaveLong --> VectorGen[Local Embedding Generator]
+        VectorGen --> StorageCheck{NanoVectorDB available?}
+        StorageCheck -->|Yes| NanoVectorDB[HNSW Index in agent_long_term_memory.json]
+        StorageCheck -->|No| MemoryList[Fallback: In-Memory List]
     end
     
-    Query[Consulta / Busqueda del Agente] --> RecallFlow[Bucle de Recuperacion - Recall]
-    RecallFlow --> SearchVectors[Busqueda de Vectores Cercanos]
-    SearchVectors --> Ebbinghaus[Aplicar Curva de Olvido Exponencial]
-    Ebbinghaus --> RankResults[Top-K Recuerdos mas Importantes]
+    Query[Agent Query / Search] --> RecallFlow[Retrieval Loop - Recall]
+    RecallFlow --> SearchVectors[Nearest Vector Search]
+    SearchVectors --> Ebbinghaus[Apply Exponential Forgetting Curve]
+    Ebbinghaus --> RankResults[Top-K Most Important Memories]
 ```
 
-### 1. Memoria de Corto Plazo (Conversational Buffer)
+### 1. Short-Term Memory (Conversational Buffer)
 
-Conserva las ultimas interacciones en su formato original de mensaje (`role` y `content`).
-*   **Limite de Capacidad:** El buffer acepta un numero maximo de turnos ($N_{\text{max}} = 5$ interacciones dobles, es decir, 10 mensajes en total).
-*   **Algoritmo de Sintesis Automatica:** Al rebasar el limite, el sistema extrae de forma heurística los hechos clave de los turnos antiguos, dejando los ultimos 2 turnos (los mas recientes) intactos en el buffer. La informacion resumida se anexa a la cadena `conversation_summary`, la cual se antepone en el prompt del agente, liberando espacio util en la ventana de contexto sin romper el hilo conductor de la sesion.
+Keeps the latest interactions in their original message format (`role` and `content`).
+*   **Capacity Limit:** The buffer accepts a maximum number of turns ($N_{\text{max}} = 5$ double interactions, i.e. 10 messages total).
+*   **Automatic Synthesis Algorithm:** When the limit is exceeded, the system heuristically extracts the key facts from the older turns, leaving the last 2 turns (the most recent) intact in the buffer. The summarized information is appended to the `conversation_summary` string, which is prepended to the agent's prompt, freeing up useful space in the context window without breaking the session's thread of continuity.
 
-### 2. Memoria de Largo Plazo (Episodic Decay Memory)
+### 2. Long-Term Memory (Episodic Decay Memory)
 
-Almacena hechos de forma permanente asociandoles un vector de caracteristicas (embedding), un timestamp de creacion y un factor de relevancia subjetiva.
+Permanently stores facts, associating each with a feature vector (embedding), a creation timestamp, and a subjective relevance factor.
 
-#### La Curva del Olvido Exponencial (Heuristica de Ebbinghaus)
-Al realizar una busqueda de recuerdos para responder a una consulta del usuario, el sistema no se limita a evaluar la similitud semantica vectorial. Aplica una formula de decaimiento temporal exponencial de la relevancia para imitar la memoria biologica:
+#### The Exponential Forgetting Curve (Ebbinghaus Heuristic)
+When performing a memory search to answer a user query, the system doesn't limit itself to evaluating vector semantic similarity. It applies an exponential temporal decay formula to relevance to mimic biological memory:
 
 $$\text{Recall Score}(F) = \text{Sim}_{\cos}(Q, F) \cdot \text{Imp}(F) \cdot e^{-\lambda \cdot \Delta t}$$
 
-Donde:
-*   $\text{Sim}_{\cos}(Q, F)$ es la similitud de coseno proyectada al rango $[0, 1]$ entre el vector de la consulta $Q$ y el vector del recuerdo indexado $F$:
+Where:
+*   $\text{Sim}_{\cos}(Q, F)$ is the cosine similarity projected onto the range $[0, 1]$ between the query vector $Q$ and the indexed memory vector $F$:
     $$\text{Sim}_{\cos}(Q, F) = \frac{\cos(\mathbf{q}, \mathbf{f}) + 1.0}{2.0}$$
-*   $\text{Imp}(F) \in [1, 10]$ es el peso de importancia asignado originalmente al hecho al ser almacenado.
-*   $\lambda$ es el coeficiente de velocidad de olvido (`decay_factor`, por defecto `0.05`).
-*   $\Delta t = t_{\text{consulta}} - t_{\text{creacion\_hecho}}$ representa la antiguedad del recuerdo en segundos.
+*   $\text{Imp}(F) \in [1, 10]$ is the importance weight originally assigned to the fact when it was stored.
+*   $\lambda$ is the forgetting-speed coefficient (`decay_factor`, defaults to `0.05`).
+*   $\Delta t = t_{\text{query}} - t_{\text{fact\_creation}}$ represents the memory's age in seconds.
 
-Bajo este modelo, recuerdos antiguos con baja importancia son "olvidados" (su score tiende a cero), mientras que hechos criticos con alta importancia o recuerdos extremadamente recientes y semanticamente afines dominan el ranking.
+Under this model, old memories with low importance are "forgotten" (their score tends to zero), while critical facts with high importance or extremely recent and semantically related memories dominate the ranking.
 
-#### Generador Determinista de Embeddings (Word-Hash Local)
-Para operar offline sin dependencias externas, el modulo calcula localmente un vector unitario de dimension $D$:
-1.  Descompone el texto del hecho en palabras utilizando la expresion regular `\w+`.
-2.  Genera el hash MD5 de cada palabra y calcula el indice modular correspondiente:
+#### Deterministic Embedding Generator (Local Word-Hash)
+To operate offline with no external dependencies, the module locally computes a unit vector of dimension $D$:
+1.  Splits the fact's text into words using the regular expression `\w+`.
+2.  Computes the MD5 hash of each word and calculates the corresponding modular index:
     $$h = \text{int(MD5}(w)\text{, 16)} \pmod D$$
-3.  Incrementa el valor del vector en la posicion $h$: $V_h \leftarrow V_h + 1.0$.
-4.  Aplica normalizacion L2 al vector resultante para proyectarlo a la superficie de una hiperesfera unitaria, permitiendo que el producto escalar represente la similitud de coseno exacta.
+3.  Increments the vector's value at position $h$: $V_h \leftarrow V_h + 1.0$.
+4.  Applies L2 normalization to the resulting vector to project it onto the surface of a unit hypersphere, allowing the dot product to represent exact cosine similarity.
 
-## Conexión con el Ecosistema
+## Connection to the Ecosystem
 
-Este componente se conecta con los modulos de la infraestructura de la siguiente forma:
-1.  **nano-vector-db:** Actua como el almacen fisico de la memoria episódica. Al invocar `save_fact`, la memoria guarda el vector y sus metadatos usando `NanoVectorDB.insert(id, vector, metadata)` y persiste los datos en disco bajo el archivo `agent_long_term_memory.json`.
-2.  **orchestra-agents:** Cada agente autonomo (Researcher, Writer) utiliza una instancia de esta memoria para persistir su scratchpad de ejecucion ReAct y recuperar informacion contextual historica de ejecuciones pasadas.
+This component connects to the infrastructure's modules as follows:
+1.  **nano-vector-db:** Acts as the physical store for episodic memory. When `save_fact` is invoked, the memory saves the vector and its metadata using `NanoVectorDB.insert(id, vector, metadata)` and persists the data to disk under the `agent_long_term_memory.json` file.
+2.  **orchestra-agents:** Each autonomous agent (Researcher, Writer) uses an instance of this memory to persist its ReAct execution scratchpad and retrieve historical contextual information from past runs.
 
-## Estructura del Proyecto
+## Project Structure
 
-*   `memory.py`: Implementacion de la clase `AgenticMemory`, el buffer de corto plazo con algoritmo de sintesis, el hasheador local de embeddings y el motor de puntuacion temporal de Ebbinghaus.
-*   `test_memory.py`: Suite de test unitarios asincronos que validan la tasa de compactacion del buffer, la consistencia de los embeddings hash y la precision de la tasa de decaimiento exponencial frente al tiempo transcurrido.
-*   `example.py`: Demostracion interactiva de simulacion de paso del tiempo (30 segundos y 10 minutos) que ilustra de que manera se atenua el score de los recuerdos viejos y cuales son retenidos por el agente.
+*   `memory.py`: Implementation of the `AgenticMemory` class, the short-term buffer with its synthesis algorithm, the local embedding hasher, and the Ebbinghaus temporal scoring engine.
+*   `test_memory.py`: Asynchronous unit test suite that validates the buffer's compaction rate, the consistency of the hash embeddings, and the accuracy of the exponential decay rate against elapsed time.
+*   `example.py`: Interactive demo simulating the passage of time (30 seconds and 10 minutes) that illustrates how the score of old memories decays and which ones are retained by the agent.
 
-## Instalacion y Uso
+## Installation and Usage
 
-### 1. Inicializar el Entorno e Instalar Dependencias
+### 1. Initialize the Environment and Install Dependencies
 
-Navegue al directorio e instale las dependencias locales requeridas:
+Navigate to the directory and install the required local dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -87,17 +87,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Ejecutar Pruebas Unitarias
+### 2. Run Unit Tests
 
-La suite valida que la logica de decaimiento temporal y la persistencia HNSW coincidan exactamente con la teoria:
+The suite validates that the temporal decay logic and HNSW persistence exactly match the theory:
 
 ```bash
 .venv/bin/python -m unittest test_memory.py
 ```
 
-### 3. Ejecutar Demostración de Curva de Olvido
+### 3. Run the Forgetting Curve Demo
 
-Ejecute la demostracion para visualizar como decaen las puntuaciones de recuerdos a traves del tiempo:
+Run the demo to visualize how memory scores decay over time:
 
 ```bash
 .venv/bin/python example.py
