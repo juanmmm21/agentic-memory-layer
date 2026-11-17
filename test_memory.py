@@ -1,6 +1,6 @@
 import unittest
 import time
-from memory import AgenticMemory
+from agentic_memory_layer.memory import AgenticMemory
 
 
 class TestAgenticMemory(unittest.TestCase):

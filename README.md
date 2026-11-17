@@ -75,6 +75,28 @@ This component connects to the infrastructure's modules as follows:
 *   `test_memory.py`: Asynchronous unit test suite that validates the buffer's compaction rate, the consistency of the hash embeddings, and the accuracy of the exponential decay rate against elapsed time.
 *   `example.py`: Interactive demo simulating the passage of time (30 seconds and 10 minutes) that illustrates how the score of old memories decays and which ones are retained by the agent.
 
+## Using it as a package
+
+Since `0.1.0` the code lives in the `agentic_memory_layer` package and the repository is
+pip-installable, so other projects can depend on it instead of copying files
+or editing `sys.path`:
+
+```bash
+pip install "agentic-memory-layer @ git+https://github.com/juanmmm21/agentic-memory-layer.git@v0.1.0"
+```
+
+```python
+from agentic_memory_layer import AgenticMemory, VectorStore
+```
+
+The old top-level modules are kept as thin re-exports, so scripts that add
+this folder to `sys.path` keep working. This component imports no other
+ai-core component: they are combined in the `aicore` SDK of
+[ai-core-infra-hub](https://github.com/juanmmm21/ai-core-infra-hub), which
+passes collaborators (vector stores, encoders, tokenizers) in by injection.
+
+Development: `pip install -e ".[dev]"`, then `pytest` and `ruff check .`.
+
 ## Installation and Usage
 
 ### 1. Initialize the Environment and Install Dependencies
