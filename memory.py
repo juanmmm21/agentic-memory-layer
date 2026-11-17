@@ -1,28 +1,23 @@
-import sys
-import os
 import time
 import math
 import uuid
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Intentamos importar la base de datos del sibling nano-vector-db
-NANO_DB_AVAILABLE = False
-NanoVectorDB = None
 
-try:
-    sibling_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "nano-vector-db")
-    )
-    if sibling_path not in sys.path:
-        sys.path.append(sibling_path)
-    # Suponemos que en nano-vector-db/database.py esta la clase principal
-    from database import NanoVectorDB
-    NANO_DB_AVAILABLE = True
-except ImportError:
-    pass
+class VectorStore(Protocol):
+    """Base vectorial opcional para la memoria de largo plazo.
+
+    ``nano_vector_db.NanoVectorDB`` la cumple tal cual, pero este paquete no la importa: los
+    componentes del ecosistema no se importan entre si y quien los une (el SDK ``aicore`` del
+    hub) pasa la instancia al construir la memoria.
+    """
+
+    def insert(self, id: str, vector: List[float], metadata: Dict[str, Any]) -> None: ...
+
+    def query(self, vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]: ...
 
 
 class AgenticMemory:
@@ -40,7 +35,8 @@ class AgenticMemory:
         self,
         short_term_max_turns: int = 5,
         decay_factor: float = 0.05,
-        vector_dim: int = 64
+        vector_dim: int = 64,
+        vector_store: Optional[VectorStore] = None,
     ) -> None:
         self.max_turns = short_term_max_turns
         self.decay_factor = decay_factor
@@ -50,25 +46,12 @@ class AgenticMemory:
         self.short_term: List[Dict[str, str]] = []
         self.conversation_summary: str = ""
         
-        # Almacenamiento de largo plazo (Base de Datos Vectorial local)
-        self.db_path = "agent_long_term_memory.json"
-        self.use_real_db = NANO_DB_AVAILABLE
-        self.vector_db = None
-        
+        # Almacenamiento de largo plazo: la base vectorial inyectada o, sin ella, una lista.
+        self.vector_db = vector_store
+        self.use_real_db = vector_store is not None
+
         # Fallback local in-memory
         self.fallback_db: List[Dict[str, Any]] = []
-        
-        if self.use_real_db:
-            try:
-                # Inicializamos la base de datos vectorial real del modulo hermano
-                if os.path.exists(self.db_path):
-                    self.vector_db = NanoVectorDB.load(self.db_path)
-                else:
-                    self.vector_db = NanoVectorDB(dimension=self.vector_dim)
-                logger.info("Base de datos vectorial NanoVectorDB conectada exitosamente a la memoria del agente.")
-            except Exception as e:
-                logger.warning(f"Error al inicializar NanoVectorDB: {str(e)}. Usando fallback de lista en memoria.")
-                self.use_real_db = False
 
     def add_interaction(self, role: str, content: str) -> None:
         """Añade un turno al buffer de corto plazo y gatilla resumen si excede max_turns."""
@@ -145,14 +128,14 @@ class AgenticMemory:
         
         if self.use_real_db and self.vector_db is not None:
             try:
-                # Insertamos en el NanoVectorDB
+                # Insertamos en la base vectorial inyectada
                 self.vector_db.insert(
                     id=str(uuid.uuid4()),
                     vector=embedding,
                     metadata={"fact": fact, "importance": importance, "created_at": timestamp, "last_accessed": timestamp}
                 )
             except Exception as e:
-                logger.error(f"Fallo al insertar en NanoVectorDB: {str(e)}. Agregando a fallback local.")
+                logger.error(f"Fallo al insertar en la base vectorial: {str(e)}. Agregando a fallback local.")
                 self.fallback_db.append(fact_item)
         else:
             self.fallback_db.append(fact_item)
@@ -180,7 +163,7 @@ class AgenticMemory:
         items = []
         if self.use_real_db and self.vector_db is not None:
             try:
-                # Buscamos en el NanoVectorDB usando similitud de coseno
+                # Buscamos en la base vectorial inyectada
                 results = self.vector_db.query(vector=query_vector, top_k=20)
                 for res in results:
                     meta = res["metadata"]
@@ -192,7 +175,7 @@ class AgenticMemory:
                         "embedding": res["vector"]
                     })
             except Exception as e:
-                logger.error(f"Fallo en consulta a NanoVectorDB: {str(e)}. Usando fallback local.")
+                logger.error(f"Fallo en consulta a la base vectorial: {str(e)}. Usando fallback local.")
                 items = self.fallback_db
         else:
             items = self.fallback_db
