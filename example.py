@@ -31,8 +31,8 @@ def run_demo() -> None:
         
     # 3. Simular el paso del tiempo: Consulta despues de 30 segundos
     t30 = t0 + 30.0
-    print(f"\n--- PASO 3: Recuperacion despues de 30 segundos (Decaimiento Temporal) ---")
-    print(f"Simulando delta_t = 30 segundos...")
+    print("\n--- PASO 3: Recuperacion despues de 30 segundos (Decaimiento Temporal) ---")
+    print("Simulando delta_t = 30 segundos...")
     results_t30 = memory.recall(query, top_k=2, current_time=t30)
     
     for i, res in enumerate(results_t30, 1):
@@ -46,8 +46,8 @@ def run_demo() -> None:
         
     # 4. Simular el paso de mucho tiempo: Consulta despues de 10 minutos (600 segundos)
     t600 = t0 + 600.0
-    print(f"\n--- PASO 4: Recuperacion despues de 10 minutos (Olvido extremo) ---")
-    print(f"Simulando delta_t = 600 segundos...")
+    print("\n--- PASO 4: Recuperacion despues de 10 minutos (Olvido extremo) ---")
+    print("Simulando delta_t = 600 segundos...")
     results_t600 = memory.recall(query, top_k=2, current_time=t600)
     
     for i, res in enumerate(results_t600, 1):
