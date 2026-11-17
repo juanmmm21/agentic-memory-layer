@@ -75,6 +75,31 @@ This component connects to the infrastructure's modules as follows:
 *   `test_memory.py`: Asynchronous unit test suite that validates the buffer's compaction rate, the consistency of the hash embeddings, and the accuracy of the exponential decay rate against elapsed time.
 *   `example.py`: Interactive demo simulating the passage of time (30 seconds and 10 minutes) that illustrates how the score of old memories decays and which ones are retained by the agent.
 
+## Long-term store: ids, forgetting, persistence and real encoders
+
+Since `0.1.0` long-term memory is usable as a real store, not only as a demo:
+
+```python
+from agentic_memory_layer import AgenticMemory
+
+memory = AgenticMemory(
+    embed_fn=my_encoder,        # any text -> vector function (a real embedding model)
+    half_life_s=30 * 86400,     # a fact's score halves every 30 days
+    path="memory.json",         # loaded if it exists, rewritten atomically on every change
+)
+with memory.batch():            # bulk inserts write the file once
+    fid = memory.save_fact("Prefers answers in Spanish", importance=8, metadata={"source": "chat"})
+hits = memory.recall("language preference", top_k=3, where={"source": "chat"}, min_similarity=0.6)
+memory.forget(fid)
+```
+
+*   `save_fact` returns a stable id (or takes `fact_id`, replacing the fact with that id).
+*   `recall` returns `id`, `fact`, `importance`, `recall_score`, `similarity`, `created_at` and
+    `metadata`; `where` filters on metadata and `min_similarity` drops weak matches.
+*   `vector_store` accepts any object with `insert`/`query` (nano-vector-db's `NanoVectorDB`
+    fits as is). If it cannot `delete`, forgotten ids are filtered out at recall time.
+*   Without `embed_fn` the old MD5 bag-of-words vector is used, so existing code is unchanged.
+
 ## Using it as a package
 
 Since `0.1.0` the code lives in the `agentic_memory_layer` package and the repository is
